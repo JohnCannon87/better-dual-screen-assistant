@@ -19,6 +19,11 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.InputEvent
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import java.io.File
@@ -67,8 +72,16 @@ object PrivilegedHelperMain {
     const val TRANSACTION_SET_TOP_SCREEN_BLANKED = IBinder.FIRST_CALL_TRANSACTION + 17
     const val TRANSACTION_GET_GAME_FPS = IBinder.FIRST_CALL_TRANSACTION + 18
     const val TRANSACTION_SET_STOCK_FROZEN_FOR_BROADCAST = IBinder.FIRST_CALL_TRANSACTION + 19
+    const val TRANSACTION_INJECT_KEY = IBinder.FIRST_CALL_TRANSACTION + 20
+    const val TRANSACTION_INJECT_TEXT = IBinder.FIRST_CALL_TRANSACTION + 21
+    const val TRANSACTION_INJECT_POINTER = IBinder.FIRST_CALL_TRANSACTION + 22
 
-    const val HELPER_PROTOCOL_VERSION = 13
+    /** Pointer injection kinds for [TRANSACTION_INJECT_POINTER]. */
+    const val POINTER_MOVE = 0
+    const val POINTER_BUTTON = 1
+    const val POINTER_SCROLL = 2
+
+    const val HELPER_PROTOCOL_VERSION = 14
     const val OS_THEME_OWNING_PACKAGE = "com.android.shell"
     const val OS_THEME_OVERLAY_NAME = "os_theme"
     const val SYSUI_PACKAGE = "com.android.systemui"
@@ -871,6 +884,36 @@ object PrivilegedHelperMain {
                         reply?.writeNoException()
                         true
                     }
+                    TRANSACTION_INJECT_KEY -> {
+                        val displayId = data.readInt()
+                        val keyCode = data.readInt()
+                        val metaState = data.readInt()
+                        val action = data.readInt() // 0 = down, 1 = up, 2 = down+up
+                        val ok = injectKeyInternal(displayId, keyCode, metaState, action)
+                        reply?.writeNoException()
+                        reply?.writeInt(if (ok) 1 else 0)
+                        true
+                    }
+                    TRANSACTION_INJECT_TEXT -> {
+                        val displayId = data.readInt()
+                        val text = data.readString() ?: ""
+                        val ok = injectTextInternal(displayId, text)
+                        reply?.writeNoException()
+                        reply?.writeInt(if (ok) 1 else 0)
+                        true
+                    }
+                    TRANSACTION_INJECT_POINTER -> {
+                        val displayId = data.readInt()
+                        val kind = data.readInt()
+                        val a = data.readFloat()
+                        val b = data.readFloat()
+                        val buttons = data.readInt()
+                        val down = data.readInt() != 0
+                        val ok = injectPointerInternal(displayId, kind, a, b, buttons, down)
+                        reply?.writeNoException()
+                        reply?.writeInt(if (ok) 1 else 0)
+                        true
+                    }
                     else -> super.onTransact(code, data, reply, flags)
                 }
             } catch (t: Throwable) {
@@ -968,6 +1011,148 @@ object PrivilegedHelperMain {
             } catch (_: Throwable) {
             }
         }
+
+        // ---- Input injection (virtual keyboard / trackpad) -------------------------------------
+
+        private val inputManagerProxy: Any? = try {
+            val binder = getServiceMethod.invoke(null, "input") as? IBinder
+            if (binder != null) {
+                val stubClass = Class.forName("android.hardware.input.IInputManager\$Stub")
+                stubClass.getMethod("asInterface", IBinder::class.java).invoke(null, binder)
+            } else {
+                null
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to get IInputManager", t)
+            null
+        }
+
+        private val injectInputEventMethod by lazy {
+            inputManagerProxy?.javaClass?.getMethod(
+                "injectInputEvent",
+                InputEvent::class.java,
+                Int::class.javaPrimitiveType
+            )
+        }
+
+        private val setDisplayIdMethod by lazy {
+            InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
+        }
+
+        private var pointerX = 960f
+        private var pointerY = 540f
+        private var pointerButtons = 0
+        private var pointerDownTime = 0L
+
+        private fun injectEvent(event: InputEvent, displayId: Int): Boolean {
+            val proxy = inputManagerProxy ?: return false
+            val method = injectInputEventMethod ?: return false
+            return try {
+                setDisplayIdMethod.invoke(event, displayId)
+                // 0 = INJECT_INPUT_EVENT_MODE_ASYNC
+                method.invoke(proxy, event, 0) as? Boolean ?: false
+            } catch (t: Throwable) {
+                Log.w(TAG, "injectEvent failed", t)
+                false
+            }
+        }
+
+        private fun injectKeyInternal(displayId: Int, keyCode: Int, metaState: Int, action: Int): Boolean {
+            val now = SystemClock.uptimeMillis()
+            fun send(act: Int): Boolean {
+                val ev = KeyEvent(
+                    now, now, act, keyCode, 0, metaState,
+                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD
+                )
+                return injectEvent(ev, displayId)
+            }
+            return when (action) {
+                0 -> send(KeyEvent.ACTION_DOWN)
+                1 -> send(KeyEvent.ACTION_UP)
+                else -> send(KeyEvent.ACTION_DOWN) and send(KeyEvent.ACTION_UP)
+            }
+        }
+
+        private fun injectTextInternal(displayId: Int, text: String): Boolean {
+            if (text.isEmpty()) return true
+            val map = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
+            val events = map.getEvents(text.toCharArray()) ?: return false
+            var ok = true
+            for (ev in events) {
+                ok = injectEvent(ev, displayId) && ok
+            }
+            return ok
+        }
+
+        private fun injectPointerInternal(
+            displayId: Int,
+            kind: Int,
+            a: Float,
+            b: Float,
+            buttons: Int,
+            down: Boolean
+        ): Boolean {
+            val now = SystemClock.uptimeMillis()
+            fun obtain(action: Int, buttonState: Int, hScroll: Float = 0f, vScroll: Float = 0f): MotionEvent {
+                val props = arrayOf(MotionEvent.PointerProperties().apply {
+                    id = 0
+                    toolType = MotionEvent.TOOL_TYPE_MOUSE
+                })
+                val coords = arrayOf(MotionEvent.PointerCoords().apply {
+                    x = pointerX
+                    y = pointerY
+                    pressure = if (buttonState != 0) 1f else 0f
+                    size = 1f
+                    if (hScroll != 0f) setAxisValue(MotionEvent.AXIS_HSCROLL, hScroll)
+                    if (vScroll != 0f) setAxisValue(MotionEvent.AXIS_VSCROLL, vScroll)
+                })
+                val downTime = if (pointerDownTime != 0L) pointerDownTime else now
+                return MotionEvent.obtain(
+                    downTime, now, action, 1, props, coords, 0, buttonState,
+                    1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
+                )
+            }
+            fun send(ev: MotionEvent): Boolean = try {
+                injectEvent(ev, displayId)
+            } finally {
+                ev.recycle()
+            }
+            return when (kind) {
+                POINTER_MOVE -> {
+                    pointerX = (pointerX + a).coerceIn(0f, TOP_DISPLAY_WIDTH - 1f)
+                    pointerY = (pointerY + b).coerceIn(0f, TOP_DISPLAY_HEIGHT - 1f)
+                    val action = if (pointerButtons != 0) MotionEvent.ACTION_MOVE else MotionEvent.ACTION_HOVER_MOVE
+                    send(obtain(action, pointerButtons))
+                }
+                POINTER_BUTTON -> {
+                    if (down) {
+                        val first = pointerButtons == 0
+                        pointerButtons = pointerButtons or buttons
+                        if (first) pointerDownTime = now
+                        val r1 = send(obtain(if (first) MotionEvent.ACTION_DOWN else MotionEvent.ACTION_MOVE, pointerButtons))
+                        val r2 = send(obtain(MotionEvent.ACTION_BUTTON_PRESS, pointerButtons))
+                        r1 && r2
+                    } else {
+                        val remaining = pointerButtons and buttons.inv()
+                        val r1 = send(obtain(MotionEvent.ACTION_BUTTON_RELEASE, remaining))
+                        pointerButtons = remaining
+                        val r2 = if (remaining == 0) {
+                            val ok = send(obtain(MotionEvent.ACTION_UP, 0))
+                            pointerDownTime = 0L
+                            ok
+                        } else {
+                            true
+                        }
+                        r1 && r2
+                    }
+                }
+                POINTER_SCROLL -> send(obtain(MotionEvent.ACTION_SCROLL, pointerButtons, hScroll = a, vScroll = b))
+                else -> false
+            }
+        }
+
+        private val TOP_DISPLAY_WIDTH = 1920f
+        private val TOP_DISPLAY_HEIGHT = 1080f
 
         private fun swapDisplayTasksInternal(): Boolean {
             val atm = activityTaskManagerProxy ?: return false

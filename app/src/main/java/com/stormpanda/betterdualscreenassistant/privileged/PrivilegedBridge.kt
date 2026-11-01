@@ -707,6 +707,64 @@ object PrivilegedBridge {
         PServerClient.exec("settings put secure ${PServerClient.shellQuote(key)} $value", wait = true)
     }
 
+    /** Injects a key press on [displayId]. [action]: 0 = down, 1 = up, 2 = down + up. */
+    fun injectKey(displayId: Int, keyCode: Int, metaState: Int = 0, action: Int = 2): Boolean =
+        transactInject(PrivilegedHelperMain.TRANSACTION_INJECT_KEY) {
+            it.writeInt(displayId)
+            it.writeInt(keyCode)
+            it.writeInt(metaState)
+            it.writeInt(action)
+        }
+
+    /** Types [text] on [displayId] using the virtual keyboard character map. */
+    fun injectText(displayId: Int, text: String): Boolean =
+        transactInject(PrivilegedHelperMain.TRANSACTION_INJECT_TEXT) {
+            it.writeInt(displayId)
+            it.writeString(text)
+        }
+
+    /** Moves the virtual mouse pointer on the top display by relative [dx]/[dy] pixels. */
+    fun injectPointerMove(displayId: Int, dx: Float, dy: Float): Boolean =
+        injectPointer(displayId, PrivilegedHelperMain.POINTER_MOVE, dx, dy, 0, false)
+
+    /** Presses or releases mouse [buttons] (MotionEvent.BUTTON_* mask). */
+    fun injectPointerButton(displayId: Int, buttons: Int, down: Boolean): Boolean =
+        injectPointer(displayId, PrivilegedHelperMain.POINTER_BUTTON, 0f, 0f, buttons, down)
+
+    /** Scrolls by [h]/[v] wheel units. */
+    fun injectPointerScroll(displayId: Int, h: Float, v: Float): Boolean =
+        injectPointer(displayId, PrivilegedHelperMain.POINTER_SCROLL, h, v, 0, false)
+
+    private fun injectPointer(displayId: Int, kind: Int, a: Float, b: Float, buttons: Int, down: Boolean): Boolean =
+        transactInject(PrivilegedHelperMain.TRANSACTION_INJECT_POINTER) {
+            it.writeInt(displayId)
+            it.writeInt(kind)
+            it.writeFloat(a)
+            it.writeFloat(b)
+            it.writeInt(buttons)
+            it.writeInt(if (down) 1 else 0)
+        }
+
+    private inline fun transactInject(code: Int, write: (Parcel) -> Unit): Boolean {
+        val binder = helperBinder ?: return false
+        if (!binder.isBinderAlive) return false
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        return try {
+            data.writeInterfaceToken(PrivilegedHelperMain.DESCRIPTOR)
+            write(data)
+            binder.transact(code, data, reply, 0)
+            reply.readException()
+            reply.readInt() != 0
+        } catch (t: Throwable) {
+            Log.w(TAG, "Input injection transaction $code failed", t)
+            false
+        } finally {
+            data.recycle()
+            reply.recycle()
+        }
+    }
+
     fun swapDisplayTasks(context: Context): Boolean {
         val binder = helperBinder
         if (binder != null && binder.isBinderAlive) {

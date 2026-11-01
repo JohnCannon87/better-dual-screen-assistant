@@ -1,0 +1,61 @@
+name: Test APK
+
+on:
+  push:
+    branches: ['feature/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Optional stable signing key so test APKs update in place. If the secrets are not set,
+      # the build falls back to the default debug key (uninstall the old build before updating).
+      - name: Configure signing
+        env:
+          KEYSTORE_B64: ${{ secrets.BDSA_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.BDSA_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > bdsa.jks
+            {
+              echo "bdsa.keystore.file=bdsa.jks"
+              echo "bdsa.keystore.alias=bdsa"
+              echo "bdsa.keystore.password=$KEYSTORE_PASSWORD"
+              echo "bdsa.keystore.key.password=$KEYSTORE_PASSWORD"
+            } >> local.properties
+            echo "Using stable CI signing key"
+          else
+            echo "No signing secrets; using default debug key"
+          fi
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
+          TAG="test-${GITHUB_RUN_NUMBER}-${SHORT}"
+          cp "$APK" "bdsa-${TAG}.apk"
+          gh release create "$TAG" "bdsa-${TAG}.apk" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Test build ${GITHUB_RUN_NUMBER} (${SHORT})" \
+            --notes "Debug APK built from ${GITHUB_REF_NAME} @ ${SHORT}. Install on the Thor to test."

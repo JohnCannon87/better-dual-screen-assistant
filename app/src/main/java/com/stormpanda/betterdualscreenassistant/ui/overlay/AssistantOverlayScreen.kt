@@ -65,6 +65,7 @@ import com.stormpanda.betterdualscreenassistant.ui.components.HardwareRingGauge
 import com.stormpanda.betterdualscreenassistant.ui.components.HorizontalSlidingBar
 import com.stormpanda.betterdualscreenassistant.ui.components.SliderKind
 import com.stormpanda.betterdualscreenassistant.ui.components.TccButton
+import com.stormpanda.betterdualscreenassistant.ui.input.InputPanel
 import com.stormpanda.betterdualscreenassistant.ui.components.TccDialogOption
 import com.stormpanda.betterdualscreenassistant.ui.components.TccOptionDialog
 import com.stormpanda.betterdualscreenassistant.ui.components.TccRadioCheckIndicator
@@ -155,7 +156,7 @@ fun AssistantOverlayScreen(
 
     val telemetry by telemetryMonitor.state.collectAsState()
 
-    val activeTab by activeTabFlow.collectAsState() // 0 = Mode, 1 = Settings
+    val activeTab by activeTabFlow.collectAsState() // 0 = Mode, 1 = Settings, 2 = Input (keyboard / trackpad)
     var activeDialog by remember { mutableStateOf(ActiveDialog.NONE) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -266,6 +267,8 @@ fun AssistantOverlayScreen(
                                 repository.setSecondaryVolumePercent(pct)
                             }
                         )
+                    } else if (activeTab == 2) {
+                        InputPanel()
                     } else {
                         SystemSettingsTab(
                             telemetry = telemetry,
@@ -1675,7 +1678,7 @@ private fun QuickSettingsGridPage(
 /**
  * Replicates `navigation_bar_layout.xml` and `NavigationBar.java`:
  * - Rounded card (`20.dp` radius, `colors.panelBackground`)
- * - 3 `TccButton`s (`Mode`, `Task`, `Settings`) spaced between `15%` and `85%` horizontal guidelines (`70%` width).
+ * - 4 `TccButton`s (`Mode`, `Task`, `Input`, `Settings`) spaced between `15%` and `85%` horizontal guidelines (`70%` width).
  */
 @Composable
 private fun NavigationBarSection(
@@ -1696,7 +1699,7 @@ private fun NavigationBarSection(
         contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(if (showEditButton) 0.82f else 0.70f),
+            modifier = Modifier.fillMaxWidth(if (showEditButton) 0.94f else 0.82f),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1713,6 +1716,14 @@ private fun NavigationBarSection(
                 iconRes = R.drawable.ic_task_manage,
                 selected = false,
                 onClick = onOpenRecents,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            TccButton(
+                label = stringResource(R.string.navigation_input_text),
+                iconRes = R.drawable.ic_nav_keyboard,
+                selected = activeTab == 2,
+                onClick = { onSelectTab(2) },
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
 
