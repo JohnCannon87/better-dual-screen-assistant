@@ -29,7 +29,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.BDSA_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > bdsa.jks
+            echo "$KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > bdsa.jks
             {
               echo "bdsa.keystore.file=bdsa.jks"
               echo "bdsa.keystore.alias=bdsa"
