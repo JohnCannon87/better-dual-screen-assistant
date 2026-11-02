@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,6 +73,7 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(56.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(colors.panelBackground)
                 .padding(4.dp),
@@ -78,20 +81,21 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             Box(
                 modifier = Modifier
-                    .width(56.dp)
+                    .width(64.dp)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(colors.panelBackgroundSelected)
-                    .pointerInput(Unit) { detectTapGestures { onClose() } }
-                    .padding(vertical = 10.dp),
+                    .background(colors.accent)
+                    .pointerInput(Unit) { detectTapGestures { onClose() } },
                 contentAlignment = Alignment.Center
             ) {
-                Text("✕", color = colors.primary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("✕", color = colors.onAccent, fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold)
             }
             InputMode.entries.forEach { m ->
                 val selected = m == mode
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .fillMaxHeight()
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (selected) colors.panelBackgroundSelected else colors.panelBackground)
                         .pointerInput(m) {
@@ -99,8 +103,7 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                                 mode = m
                                 prefs(context).edit().putString(PREF_MODE, m.name).apply()
                             }
-                        }
-                        .padding(vertical = 10.dp),
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -211,10 +214,10 @@ private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifi
                 modifier = Modifier.weight(2f).fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                PanelKey("Slow", Modifier.weight(1f)) {
+                PanelKey("Speed −", Modifier.weight(1f), small = true) {
                     state.sensitivity = (state.sensitivity - 0.2f).coerceAtLeast(0.6f)
                 }
-                PanelKey("Fast", Modifier.weight(1f)) {
+                PanelKey("Speed +", Modifier.weight(1f), small = true) {
                     state.sensitivity = (state.sensitivity + 0.2f).coerceAtMost(4f)
                 }
             }
@@ -262,7 +265,8 @@ private data class Key(
     val code: Int,
     val shifted: String? = null,
     val weight: Float = 1f,
-    val kind: KeyKind = KeyKind.NORMAL
+    val kind: KeyKind = KeyKind.NORMAL,
+    val function: Boolean = false
 )
 
 private fun letter(c: Char) = Key(c.uppercase(), KeyEvent.KEYCODE_A + (c - 'a'), c.uppercase())
@@ -288,18 +292,20 @@ private val keyComma = Key(",", KeyEvent.KEYCODE_COMMA, "<")
 private val keyPeriod = Key(".", KeyEvent.KEYCODE_PERIOD, ">")
 private val keySlash = Key("/", KeyEvent.KEYCODE_SLASH, "?")
 
-private fun mod(label: String, code: Int, kind: KeyKind, weight: Float) = Key(label, code, null, weight, kind)
+private fun mod(label: String, code: Int, kind: KeyKind, weight: Float) = Key(label, code, null, weight, kind, true)
 private fun plain(label: String, code: Int, weight: Float = 1f) = Key(label, code, null, weight)
+/** A non-character "function" key such as Esc, Tab or Enter, drawn with a themed background. */
+private fun fn(label: String, code: Int, weight: Float = 1f) = Key(label, code, null, weight, KeyKind.NORMAL, true)
 
 /** Compact layout: strict 10-column grid with large keys (DS Keyboard "US-0" style). */
 private val compactRows: List<List<Key>> = listOf(
     listOf(
-        plain("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), plain("F1", KeyEvent.KEYCODE_F1, 2f),
-        plain("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f), plain("Del", KeyEvent.KEYCODE_FORWARD_DEL, 2f),
-        plain("Back", KeyEvent.KEYCODE_DEL, 2f)
+        fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), plain("F1", KeyEvent.KEYCODE_F1, 2f),
+        fn("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f), fn("Del", KeyEvent.KEYCODE_FORWARD_DEL, 2f),
+        fn("Back", KeyEvent.KEYCODE_DEL, 2f)
     ),
-    listOf(plain("Tab", KeyEvent.KEYCODE_TAB, 2f), keyApostrophe, keyBackslash, keyLBracket, keyRBracket,
-        keyMinus, keyEquals, plain("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
+    listOf(fn("Tab", KeyEvent.KEYCODE_TAB, 2f), keyApostrophe, keyBackslash, keyLBracket, keyRBracket,
+        keyMinus, keyEquals, fn("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
     digitCodes,
     letters("qwertyuiop"),
     letters("asdfghjkl") + keySemicolon,
@@ -315,15 +321,15 @@ private val compactRows: List<List<Key>> = listOf(
 
 /** Full PC layout on a 15-unit grid (DS Keyboard "US-1" style). */
 private val fullRows: List<List<Key>> = listOf(
-    listOf(plain("Esc", KeyEvent.KEYCODE_ESCAPE, 2f)) +
+    listOf(fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f)) +
         (1..12).map { plain("F$it", KeyEvent.KEYCODE_F1 + it - 1) } +
-        plain("SL", KeyEvent.KEYCODE_SCROLL_LOCK),
+        fn("SL", KeyEvent.KEYCODE_SCROLL_LOCK),
     listOf(Key("`", KeyEvent.KEYCODE_GRAVE, "~")) + digitCodes + listOf(keyMinus, keyEquals) +
-        plain("Back", KeyEvent.KEYCODE_DEL, 2f),
-    listOf(plain("Tab", KeyEvent.KEYCODE_TAB, 2f)) + letters("qwertyuiop") +
+        fn("Back", KeyEvent.KEYCODE_DEL, 2f),
+    listOf(fn("Tab", KeyEvent.KEYCODE_TAB, 2f)) + letters("qwertyuiop") +
         listOf(keyLBracket, keyRBracket, keyBackslash),
-    listOf(plain("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f)) + letters("asdfghjkl") +
-        listOf(keySemicolon, keyApostrophe, plain("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
+    listOf(fn("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f)) + letters("asdfghjkl") +
+        listOf(keySemicolon, keyApostrophe, fn("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
     listOf(mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f), keyBackslash) + letters("zxcvbnm") +
         listOf(keyComma, keyPeriod, keySlash, mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f)),
     listOf(
@@ -409,6 +415,7 @@ private fun VirtualKeyboard(rows: List<List<Key>>, modifier: Modifier = Modifier
                         topLabel = if (stacked) key.shifted else null,
                         modifier = Modifier.weight(key.weight),
                         highlighted = active,
+                        function = key.function,
                         small = key.label.length > 2,
                         onClick = { press(key) }
                     )
@@ -424,6 +431,7 @@ private fun PanelKey(
     modifier: Modifier = Modifier,
     topLabel: String? = null,
     highlighted: Boolean = false,
+    function: Boolean = false,
     small: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -435,14 +443,20 @@ private fun PanelKey(
             .clip(RoundedCornerShape(8.dp))
             .background(
                 when {
-                    highlighted -> colors.accent.copy(alpha = 0.22f)
+                    highlighted -> colors.accent.copy(alpha = 0.40f).compositeOver(colors.panelBackground)
+                    function && pressed -> colors.accent.copy(alpha = 0.32f).compositeOver(colors.panelBackground)
+                    function -> colors.accent.copy(alpha = 0.16f).compositeOver(colors.panelBackground)
                     pressed -> colors.panelBackgroundSelected
                     else -> colors.panelBackground
                 }
             )
             .border(
                 1.dp,
-                if (highlighted) colors.accent.copy(alpha = 0.6f) else colors.primary.copy(alpha = 0.08f),
+                when {
+                    highlighted -> colors.accent.copy(alpha = 0.8f)
+                    function -> colors.accent.copy(alpha = 0.35f)
+                    else -> colors.primary.copy(alpha = 0.08f)
+                },
                 RoundedCornerShape(8.dp)
             )
             .pointerInput(onClick) {
