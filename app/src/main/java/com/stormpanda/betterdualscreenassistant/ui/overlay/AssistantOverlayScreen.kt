@@ -1720,14 +1720,6 @@ private fun NavigationBarSection(
             )
 
             TccButton(
-                label = stringResource(R.string.navigation_input_text),
-                iconRes = R.drawable.ic_nav_keyboard,
-                selected = activeTab == 2,
-                onClick = { onSelectTab(2) },
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-
-            TccButton(
                 label = stringResource(R.string.navigation_system_set_text),
                 iconRes = R.drawable.ic_system_set,
                 selected = activeTab == 1,
@@ -1744,6 +1736,14 @@ private fun NavigationBarSection(
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
+
+            TccButton(
+                label = stringResource(R.string.navigation_input_text),
+                iconRes = R.drawable.ic_nav_keyboard,
+                selected = activeTab == 2,
+                onClick = { onSelectTab(2) },
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
         }
     }
 }
