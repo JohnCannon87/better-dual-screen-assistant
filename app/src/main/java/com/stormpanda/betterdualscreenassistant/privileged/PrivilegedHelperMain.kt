@@ -81,6 +81,11 @@ object PrivilegedHelperMain {
     const val POINTER_BUTTON = 1
     const val POINTER_SCROLL = 2
 
+    /** Top display (`displayId = 0`) size in pixels; bounds the virtual mouse pointer. */
+    private const val TOP_DISPLAY_WIDTH_PX = 1920f
+    private const val TOP_DISPLAY_HEIGHT_PX = 1080f
+    private const val INJECT_INPUT_EVENT_MODE_ASYNC = 0
+
     const val HELPER_PROTOCOL_VERSION = 14
     const val OS_THEME_OWNING_PACKAGE = "com.android.shell"
     const val OS_THEME_OVERLAY_NAME = "os_theme"
@@ -1039,18 +1044,33 @@ object PrivilegedHelperMain {
             InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
         }
 
-        private var pointerX = 960f
-        private var pointerY = 540f
+        private var pointerX = TOP_DISPLAY_WIDTH_PX / 2f
+        private var pointerY = TOP_DISPLAY_HEIGHT_PX / 2f
         private var pointerButtons = 0
         private var pointerDownTime = 0L
+        private var inputInjectionLogged = false
+        private var inputUnavailableLogged = false
 
         private fun injectEvent(event: InputEvent, displayId: Int): Boolean {
-            val proxy = inputManagerProxy ?: return false
-            val method = injectInputEventMethod ?: return false
+            val proxy = inputManagerProxy
+            val method = injectInputEventMethod
+            if (proxy == null || method == null) {
+                if (!inputUnavailableLogged) {
+                    inputUnavailableLogged = true
+                    Log.w(TAG, "Input injection unavailable: IInputManager.injectInputEvent not resolved")
+                }
+                return false
+            }
+            if (!inputInjectionLogged) {
+                inputInjectionLogged = true
+                Log.i(TAG, "First input injection received (displayId=$displayId)")
+            }
             return try {
                 setDisplayIdMethod.invoke(event, displayId)
                 // 0 = INJECT_INPUT_EVENT_MODE_ASYNC
-                method.invoke(proxy, event, 0) as? Boolean ?: false
+                val accepted = method.invoke(proxy, event, INJECT_INPUT_EVENT_MODE_ASYNC) as? Boolean ?: false
+                if (!accepted) Log.w(TAG, "injectInputEvent rejected ${event.javaClass.simpleName} on display $displayId")
+                accepted
             } catch (t: Throwable) {
                 Log.w(TAG, "injectEvent failed", t)
                 false
@@ -1119,8 +1139,8 @@ object PrivilegedHelperMain {
             }
             return when (kind) {
                 POINTER_MOVE -> {
-                    pointerX = (pointerX + a).coerceIn(0f, TOP_DISPLAY_WIDTH - 1f)
-                    pointerY = (pointerY + b).coerceIn(0f, TOP_DISPLAY_HEIGHT - 1f)
+                    pointerX = (pointerX + a).coerceIn(0f, TOP_DISPLAY_WIDTH_PX - 1f)
+                    pointerY = (pointerY + b).coerceIn(0f, TOP_DISPLAY_HEIGHT_PX - 1f)
                     val action = if (pointerButtons != 0) MotionEvent.ACTION_MOVE else MotionEvent.ACTION_HOVER_MOVE
                     send(obtain(action, pointerButtons))
                 }
@@ -1150,9 +1170,6 @@ object PrivilegedHelperMain {
                 else -> false
             }
         }
-
-        private val TOP_DISPLAY_WIDTH = 1920f
-        private val TOP_DISPLAY_HEIGHT = 1080f
 
         private fun swapDisplayTasksInternal(): Boolean {
             val atm = activityTaskManagerProxy ?: return false

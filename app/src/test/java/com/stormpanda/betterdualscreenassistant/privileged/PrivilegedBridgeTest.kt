@@ -356,4 +356,88 @@ class PrivilegedBridgeTest {
                 it.contains("screencap -p -d 4630946883500138628")
         })
     }
+    @Test
+    fun `injectKey sends display, key code, meta state and action to the helper`() {
+        var display = -1
+        var keyCode = -1
+        var meta = -1
+        var action = -1
+        setHelperBinder(createMockHelperBinder { code, data, reply ->
+            if (code == PrivilegedHelperMain.TRANSACTION_INJECT_KEY) {
+                data.enforceInterface(PrivilegedHelperMain.DESCRIPTOR)
+                display = data.readInt()
+                keyCode = data.readInt()
+                meta = data.readInt()
+                action = data.readInt()
+                reply.writeNoException()
+                reply.writeInt(1)
+            }
+        })
+
+        assertTrue(PrivilegedBridge.injectKey(0, 29, 1, 2))
+        assertEquals(0, display)
+        assertEquals(29, keyCode)
+        assertEquals(1, meta)
+        assertEquals(2, action)
+    }
+
+    @Test
+    fun `injectText and pointer calls use their own transactions`() {
+        var text: String? = null
+        var kind = -1
+        var dx = 0f
+        var dy = 0f
+        var buttons = -1
+        var down = false
+        setHelperBinder(createMockHelperBinder { code, data, reply ->
+            data.enforceInterface(PrivilegedHelperMain.DESCRIPTOR)
+            when (code) {
+                PrivilegedHelperMain.TRANSACTION_INJECT_TEXT -> {
+                    data.readInt()
+                    text = data.readString()
+                }
+                PrivilegedHelperMain.TRANSACTION_INJECT_POINTER -> {
+                    data.readInt()
+                    kind = data.readInt()
+                    dx = data.readFloat()
+                    dy = data.readFloat()
+                    buttons = data.readInt()
+                    down = data.readInt() != 0
+                }
+            }
+            reply.writeNoException()
+            reply.writeInt(1)
+        })
+
+        assertTrue(PrivilegedBridge.injectText(0, "hi"))
+        assertEquals("hi", text)
+
+        assertTrue(PrivilegedBridge.injectPointerMove(0, 3f, -4f))
+        assertEquals(PrivilegedHelperMain.POINTER_MOVE, kind)
+        assertEquals(3f, dx, 0.001f)
+        assertEquals(-4f, dy, 0.001f)
+
+        assertTrue(PrivilegedBridge.injectPointerButton(0, 1, true))
+        assertEquals(PrivilegedHelperMain.POINTER_BUTTON, kind)
+        assertEquals(1, buttons)
+        assertTrue(down)
+
+        assertTrue(PrivilegedBridge.injectPointerScroll(0, 0f, 2f))
+        assertEquals(PrivilegedHelperMain.POINTER_SCROLL, kind)
+        assertEquals(2f, dy, 0.001f)
+    }
+
+    @Test
+    fun `input injection returns false when helper is unavailable or reports failure`() {
+        setHelperBinder(null)
+        assertFalse(PrivilegedBridge.injectKey(0, 29))
+
+        setHelperBinder(createMockHelperBinder { code, _, reply ->
+            if (code == PrivilegedHelperMain.TRANSACTION_INJECT_KEY) {
+                reply.writeNoException()
+                reply.writeInt(0)
+            }
+        })
+        assertFalse(PrivilegedBridge.injectKey(0, 29))
+    }
 }

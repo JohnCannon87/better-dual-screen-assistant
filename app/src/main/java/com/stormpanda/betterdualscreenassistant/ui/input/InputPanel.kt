@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stormpanda.betterdualscreenassistant.input.InputInjector
 import com.stormpanda.betterdualscreenassistant.ui.theme.LocalTccColors
+import com.stormpanda.megingiard.AppLog
 import kotlin.math.abs
 
 private enum class InputMode(val label: String) {
@@ -50,6 +51,19 @@ private enum class InputMode(val label: String) {
 private const val PREFS_NAME = "input_panel"
 private const val PREF_MODE = "last_mode"
 private const val PREF_SENSITIVITY = "trackpad_sensitivity"
+private const val TAG = "InputPanel"
+
+// Trackpad tuning.
+private const val DEFAULT_SENSITIVITY = 1.6f
+private const val MIN_SENSITIVITY = 0.6f
+private const val MAX_SENSITIVITY = 4f
+private const val SENSITIVITY_STEP = 0.2f
+private const val ACCEL_SPEED_DIVISOR = 25f
+private const val MAX_ACCEL_BONUS = 1.5f
+private const val SCROLL_PIXELS_PER_UNIT = 40f
+private const val TAP_MAX_MOVE_PX = 24f
+private const val TAP_MAX_DURATION_MS = 280L
+private const val TWO_FINGER_TAP_POINTERS = 2
 
 private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -85,7 +99,12 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(10.dp))
                     .background(colors.accent)
-                    .pointerInput(Unit) { detectTapGestures { onClose() } },
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            AppLog.i(TAG, "input panel closed via close key")
+                            onClose()
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Text("✕", color = colors.onAccent, fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold)
@@ -101,6 +120,7 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                         .pointerInput(m) {
                             detectTapGestures {
                                 mode = m
+                                AppLog.i(TAG, "input mode -> ${m.name}")
                                 prefs(context).edit().putString(PREF_MODE, m.name).apply()
                             }
                         },
@@ -131,7 +151,7 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------------------------
 
 private class TrackpadState(private val context: Context) {
-    private var value by mutableFloatStateOf(prefs(context).getFloat(PREF_SENSITIVITY, 1.6f))
+    private var value by mutableFloatStateOf(prefs(context).getFloat(PREF_SENSITIVITY, DEFAULT_SENSITIVITY))
     var sensitivity: Float
         get() = value
         set(v) {
@@ -168,7 +188,7 @@ private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifi
                                 val d = pressed[0].positionChange()
                                 totalMove += abs(d.x) + abs(d.y)
                                 val speed = abs(d.x) + abs(d.y)
-                                val accel = 1f + (speed / 25f).coerceAtMost(1.5f)
+                                val accel = 1f + (speed / ACCEL_SPEED_DIVISOR).coerceAtMost(MAX_ACCEL_BONUS)
                                 InputInjector.move(d.x * state.sensitivity * accel, d.y * state.sensitivity * accel)
                             } else if (pressed.size >= 2) {
                                 var dx = 0f
@@ -181,14 +201,14 @@ private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifi
                                 dx /= pressed.size
                                 dy /= pressed.size
                                 totalMove += abs(dx) + abs(dy)
-                                InputInjector.scroll(dx / 40f, dy / 40f)
+                                InputInjector.scroll(dx / SCROLL_PIXELS_PER_UNIT, dy / SCROLL_PIXELS_PER_UNIT)
                             }
                             event.changes.forEach { it.consume() }
                         }
-                        if (totalMove < 24f && lastTime - startTime < 280) {
+                        if (totalMove < TAP_MAX_MOVE_PX && lastTime - startTime < TAP_MAX_DURATION_MS) {
                             when (maxPointers) {
                                 1 -> InputInjector.click(InputInjector.BUTTON_LEFT)
-                                2 -> InputInjector.click(InputInjector.BUTTON_RIGHT)
+                                TWO_FINGER_TAP_POINTERS -> InputInjector.click(InputInjector.BUTTON_RIGHT)
                                 else -> InputInjector.click(InputInjector.BUTTON_MIDDLE)
                             }
                         }
@@ -215,10 +235,10 @@ private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifi
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 PanelKey("Speed −", Modifier.weight(1f), small = true) {
-                    state.sensitivity = (state.sensitivity - 0.2f).coerceAtLeast(0.6f)
+                    state.sensitivity = (state.sensitivity - SENSITIVITY_STEP).coerceAtLeast(MIN_SENSITIVITY)
                 }
                 PanelKey("Speed +", Modifier.weight(1f), small = true) {
-                    state.sensitivity = (state.sensitivity + 0.2f).coerceAtMost(4f)
+                    state.sensitivity = (state.sensitivity + SENSITIVITY_STEP).coerceAtMost(MAX_SENSITIVITY)
                 }
             }
         }
@@ -258,9 +278,9 @@ private fun MouseButton(label: String, button: Int, modifier: Modifier) {
 // Keyboard
 // ---------------------------------------------------------------------------------------------
 
-private enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META }
+internal enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META }
 
-private data class Key(
+internal data class Key(
     val label: String,
     val code: Int,
     val shifted: String? = null,
@@ -298,7 +318,7 @@ private fun plain(label: String, code: Int, weight: Float = 1f) = Key(label, cod
 private fun fn(label: String, code: Int, weight: Float = 1f) = Key(label, code, null, weight, KeyKind.NORMAL, true)
 
 /** Compact layout: strict 10-column grid with large keys (DS Keyboard "US-0" style). */
-private val compactRows: List<List<Key>> = listOf(
+internal val compactRows: List<List<Key>> = listOf(
     listOf(
         fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), mod("Alt", KeyEvent.KEYCODE_ALT_LEFT, KeyKind.ALT, 2f),
         fn("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f), fn("Del", KeyEvent.KEYCODE_FORWARD_DEL, 2f),
@@ -320,7 +340,7 @@ private val compactRows: List<List<Key>> = listOf(
 )
 
 /** Full PC layout on a 15-unit grid (DS Keyboard "US-1" style). */
-private val fullRows: List<List<Key>> = listOf(
+internal val fullRows: List<List<Key>> = listOf(
     listOf(fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f)) +
         (1..12).map { plain("F$it", KeyEvent.KEYCODE_F1 + it - 1) } +
         fn("SL", KeyEvent.KEYCODE_SCROLL_LOCK),

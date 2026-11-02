@@ -1,6 +1,7 @@
 package com.stormpanda.betterdualscreenassistant.input
 
 import android.view.MotionEvent
+import com.stormpanda.megingiard.AppLog
 import com.stormpanda.betterdualscreenassistant.privileged.PrivilegedBridge
 import java.util.concurrent.Executors
 
@@ -13,6 +14,8 @@ import java.util.concurrent.Executors
 object InputInjector {
     /** Display that receives the injected input (Top screen). */
     const val TARGET_DISPLAY_ID = 0
+
+    private const val TAG = "InputInjector"
 
     const val BUTTON_LEFT = MotionEvent.BUTTON_PRIMARY
     const val BUTTON_RIGHT = MotionEvent.BUTTON_SECONDARY
@@ -32,6 +35,7 @@ object InputInjector {
     }
 
     fun text(text: String) {
+        AppLog.d(TAG, "text injection length=${text.length}")
         executor.execute { PrivilegedBridge.injectText(TARGET_DISPLAY_ID, text) }
     }
 
@@ -59,6 +63,7 @@ object InputInjector {
     }
 
     fun button(buttons: Int, down: Boolean) {
+        AppLog.d(TAG, "mouse button mask=$buttons down=$down")
         executor.execute { PrivilegedBridge.injectPointerButton(TARGET_DISPLAY_ID, buttons, down) }
     }
 

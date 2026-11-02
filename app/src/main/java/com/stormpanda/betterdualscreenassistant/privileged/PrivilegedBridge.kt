@@ -745,9 +745,19 @@ object PrivilegedBridge {
             it.writeInt(if (down) 1 else 0)
         }
 
+    @Volatile
+    private var inputUnavailableLogged = false
+
     private inline fun transactInject(code: Int, write: (Parcel) -> Unit): Boolean {
-        val binder = helperBinder ?: return false
-        if (!binder.isBinderAlive) return false
+        val binder = helperBinder
+        if (binder == null || !binder.isBinderAlive) {
+            if (!inputUnavailableLogged) {
+                inputUnavailableLogged = true
+                Log.w(TAG, "Dropping input injection: privileged helper not connected")
+            }
+            return false
+        }
+        inputUnavailableLogged = false
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
         return try {
