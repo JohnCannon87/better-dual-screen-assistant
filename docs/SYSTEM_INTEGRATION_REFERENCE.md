@@ -84,7 +84,7 @@ Stored in `context.getSharedPreferences("better_dsa_prefs", Context.MODE_PRIVATE
 | `temp_fahrenheit` | `Boolean` | `false` | Displays CPU temperature in Fahrenheit (`℉`) when `true`, or Celsius (`℃`) when `false` (default). |
 | `show_edit_button` | `Boolean` | `true` | Shows the 4th **Edit** button in the overlay's bottom navigation bar. |
 | `remember_last_tab` | `Boolean` | `true` | Restores `last_active_tab` when reopening the overlay. |
-| `last_active_tab` | `Int` | `0` | Last selected overlay tab (`0` = Mode, `1` = Settings). |
+| `last_active_tab` | `Int` | `0` | Last selected overlay tab (`0` = Mode, `1` = Settings, `2` = Input). |
 | `show_swap_screens_button` | `Boolean` | `true` | Shows the 4th **Swap Screens** button in the Mode tab's upper card. |
 | `show_led_brightness_slider` | `Boolean` | `true` | Shows the 4th **Stick LED** brightness slider in the Mode tab's brightness card. |
 | `no_more_close_tip` | `Boolean` | `false` | When `true`, skips the confirmation dialog before blanking the bottom screen (`mode = 1`). |
@@ -102,6 +102,15 @@ Stored in `context.getSharedPreferences("better_dsa_prefs", Context.MODE_PRIVATE
 | `bottom_touch_locked` | `Boolean` | `false` | State of the **Bottom Touch Lock** Quick Setting tile. |
 | `qs_tile_order` | `String` | Comma-separated keys | Ordered list of all 22 `QuickSettingTileId` keys. Automatically appends any newly added enum entries on upgrade. |
 | `qs_enabled_tiles` | `String` | 10 Stock AYN keys | Comma-separated list of currently enabled `QuickSettingTileId` keys. |
+
+### 2.1 Input Panel Preferences (`input_panel`)
+
+Stored separately in `context.getSharedPreferences("input_panel", Context.MODE_PRIVATE)` by `ui/input/InputPanel.kt`:
+
+| Key Name | Type | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `last_mode` | `String` | `COMPACT` | Last selected Input tab view: `COMPACT`, `FULL`, or `TRACKPAD`. |
+| `trackpad_sensitivity` | `Float` | `1.6` | Trackpad pointer sensitivity multiplier (`0.6..4.0`, step `0.2`). |
 
 ---
 

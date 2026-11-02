@@ -16,6 +16,7 @@ This document provides a complete functional reference for **Better Dual Screen 
    - [3.5 Modal Configuration Dialogs](#35-modal-configuration-dialogs)
    - [3.6 Live Hardware Telemetry Panel](#36-live-hardware-telemetry-panel)
    - [3.7 Bottom Navigation Bar](#37-bottom-navigation-bar)
+   - [3.8 Input Tab (`Tab 2`): Virtual Keyboard & Trackpad](#38-input-tab-tab-2-virtual-keyboard--trackpad)
 4. [Top-Screen Companion Settings App (`MainActivity`)](#4-top-screen-companion-settings-app-mainactivity)
    - [4.1 Gamepad & Touch Navigation Controls](#41-gamepad--touch-navigation-controls)
    - [4.2 Live Dual-Screen Preview Behavior](#42-live-dual-screen-preview-behavior)
@@ -251,12 +252,26 @@ Located along the bottom `30%` of the **Settings** tab (`Tab 1`), the telemetry 
 
 ### 3.7 Bottom Navigation Bar
 
-Centered at the bottom of the overlay (`80dp` height pill container in `NavigationBarSection`), the navigation bar contains 3 buttons (or 4 when **Show Edit Button in Overlay** is enabled):
+Centered at the bottom of the overlay (`80dp` height pill container in `NavigationBarSection`), the navigation bar contains 4 buttons (or 5 when **Show Edit Button in Overlay** is enabled):
 
 1. **Mode** (`Tab 0`): Switches the main card to the **Mode** tab (Screen Modes, Swap Screens, Brightness, Volume). Highlighted when active.
 2. **Task**: Dismisses the Assistant Overlay (`hideOverlay()`) and invokes `OverviewProxyClient.toggleRecentAppsOnBottomScreen()` (`IOverviewProxy` transaction `6` with `displayId = 4`) to open the Android Recents / Task Switcher specifically for the bottom screen.
 3. **Settings** (`Tab 1`): Switches the main card to the **Settings** tab (Frame Rate, Quick Settings Pager, Live Telemetry). Highlighted when active.
 4. **Edit** *(Optional, ON by default)*: Launches the **Companion Settings App** (`MainActivity`) on the Top Screen (`displayId = 0` via `ActivityOptions.setLaunchDisplayId(0)`), while keeping the Assistant Overlay open on the Bottom Screen (`displayId = 4`) for side-by-side live editing.
+5. **Input** (`Tab 2`): Always the last (right-most) button. Switches the main card to the **Input** tab (see [3.8](#38-input-tab-tab-2-virtual-keyboard--trackpad)). While the Input tab is active the navigation bar is hidden to give the keyboard the full panel height; the **✕** close key returns to the **Settings** tab, where the navigation bar reappears. If **Remember Last Tab** is enabled, reopening the overlay returns to the Input tab.
+
+---
+
+### 3.8 Input Tab (`Tab 2`): Virtual Keyboard & Trackpad
+
+The **Input** tab (`InputPanel` in `ui/input/InputPanel.kt`) turns the bottom screen into a keyboard and trackpad that control the **Top Screen** (`displayId = 0`). Key, text, and mouse events are injected by `PrivilegedHelperMain` (`UID 0`) via `IInputManager.injectInputEvent` (see `TRANSACTION_INJECT_KEY` / `_TEXT` / `_POINTER`), so no on-screen IME or accessibility service is required.
+
+- **Header row** (fixed `56dp`): a theme-accent **✕** close key on the far left (returns to the Settings tab), followed by three equal-height tabs: **Compact**, **Full**, and **Trackpad**. The last-used tab is remembered (`input_panel` / `last_mode`); the first launch defaults to **Compact**.
+- **Compact keyboard**: a strict 10-column grid with large keys. Rows: `Esc Alt Caps Del Back`; `Tab ' \ [ ] - = Enter`; `1–0`; `Q–P`; `A–L ;`; `Z–M , . /`; `Ctrl Shift Space ◄ ▲ ▼ ►`.
+- **Full keyboard**: a 15-unit PC layout with `Esc F1–F12 SL`, the number row with `` ` `` and `Back`, `Tab`/`Caps` rows, split `Shift`, and a bottom row of `Ctrl Wn Alt Space Alt Ctrl`.
+- **Key behavior**: symbol keys show the shifted symbol small above the base symbol. `Shift`, `Ctrl`, `Alt`, and `Win` are one-shot latches: tap to latch (accent-highlighted, a real modifier key-down is injected), and the latch is released after the next normal key. Function keys (`Esc`, `Tab`, `Caps`, `Del`, `Back`, `Enter`, `SL`, modifiers, and arrows) share an accent-tinted background; letters, symbols, `F1–F12`, and `Space` use the plain panel background.
+- **Trackpad**: one finger moves the pointer (with speed-based acceleration); a short tap is a left click; two fingers scroll; a two-finger tap is a right click; a three-finger tap is a middle click. Hold-capable **Left / Middle / Right** buttons sit below the pad for dragging, with **Speed −** / **Speed +** buttons adjusting pointer sensitivity (`0.6×`–`4.0×`, default `1.6×`, step `0.2×`, persisted as `trackpad_sensitivity`).
+- **Limits**: events always target `displayId = 0`. Modifiers are not held across keys beyond a single press, and held keys do not auto-repeat.
 
 ---
 

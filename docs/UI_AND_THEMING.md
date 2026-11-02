@@ -10,6 +10,7 @@ This document specifies the visual layout geometry, custom non-Material canvas w
    - [1.1 Vertical Stack & Fixed Heights](#11-vertical-stack--fixed-heights)
    - [1.2 Mode Tab (`Tab 0`) Layout Proportions](#12-mode-tab-tab-0-layout-proportions)
    - [1.3 Settings Tab (`Tab 1`) Layout Proportions](#13-settings-tab-tab-1-layout-proportions)
+   - [1.4 Input Tab (`Tab 2`) Layout & Theming](#14-input-tab-tab-2-layout--theming)
 2. [Custom Non-Material Canvas & Touch Widgets (`TccWidgets.kt`)](#2-custom-non-material-canvas--touch-widgets-tccwidgetskt)
    - [2.1 `VerticalProgressBar` & `TccSliderRow`](#21-verticalprogressbar--tccsliderrow)
    - [2.2 `TccButton` (Dual-Mode Action & Tile Button)](#22-tccbutton-dual-mode-action--tile-button)
@@ -41,13 +42,13 @@ The AYN Thor's bottom screen (`displayId = 4`) has a physical resolution of `124
 │ │ Main Panel Card (height = @dimen/dp_578, radius = @dimen/dp_16)      │ │
 │ │ paddingHorizontal = @dimen/dp_15, paddingTop = @dimen/dp_8           │ │
 │ │                                                                      │ │
-│ │   [ Tab 0: ScreenControlTab ]  OR  [ Tab 1: SystemSettingsTab ]      │ │
+│ │   [ Tab 0: ScreenControlTab ] / [ Tab 1: SystemSettingsTab ] / [ Tab 2: InputPanel ] │ │
 │ │                                                                      │ │
 │ └──────────────────────────────────────────────────────────────────────┘ │
 ├──────────────────────────────────────────────────────────────────────────┤
 │      ┌────────────────────────────────────────────────────────────┐      │
 │      │ NavigationBarSection Pill (height = @dimen/dp_80)          │      │
-│      │ [ Mode ]      [ Task ]      [ Settings ]      [ Edit* ]    │      │
+│      │ [ Mode ]   [ Task ]   [ Settings ]   [ Edit* ]   [ Input ] │      │
 │      └────────────────────────────────────────────────────────────┘      │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -71,6 +72,16 @@ Inside the `578dp` Main Panel Card (`padding = 15dp`), `SystemSettingsTab` uses 
   - **TEMP Card** (`weight = 2f`, `20%` width)
   - **FAN Card** (`weight = 2f`, `20%` width, left spacer `@dimen/dp_15`)
   - **4 Ring Gauges Card** (`weight = 6f`, `60%` width, left spacer `@dimen/dp_15`): `CPU`, `GPU`, `PWR`, and `RAM` `HardwareRingGauge`s arranged in an evenly spaced row.
+
+### 1.4 Input Tab (`Tab 2`) Layout & Theming
+
+`InputPanel` is the one deliberate exception to the fixed vertical stack in [1.1](#11-vertical-stack--fixed-heights): while `Tab 2` is active, `NavigationBarSection` is **not composed** and the main area's bottom padding grows from `5dp` to `15dp`, giving the keyboard the remaining height. A themed **✕** key returns to `Tab 1`, which restores the navigation bar.
+
+- **Header row**: fixed `56dp` height, `4dp` padding, `14dp` corner radius, `panelBackground`. Children (the `64dp`-wide **✕** and the three weighted tabs) all use `fillMaxHeight()` so their backgrounds are identical in height. The **✕** uses `accent` with `onAccent` text; the selected tab uses `panelBackgroundSelected` with an `accent` label.
+- **Key grid**: keys are separated by `3dp` (`KeyGap`) with `8dp` rounded corners and a `1dp` outline (`primary` at `8%` alpha). Rows fill the available height equally (`weight(1f)`); key widths use per-key weights on a 10-column (Compact) or 15-unit (Full) grid.
+- **Key states (subtle theming)**: plain keys use `panelBackground`; pressed plain keys use `panelBackgroundSelected`. **Function keys** (`Key.function = true`) use `accent` at `16%` alpha composited over `panelBackground` with an `accent` `35%` outline (`32%` fill while pressed). **Latched modifiers** use `accent` at `40%` alpha with an `accent` `80%` outline and `accent` label.
+- **Trackpad surface**: `panelBackground` with a `1dp` `accent` `25%` outline.
+- All colors are read from `LocalTccColors`, so the panel follows whichever stock or Megingiard palette is selected. It uses plain Compose boxes and `Text` rather than Material 3 cards or sliders.
 
 ---
 
