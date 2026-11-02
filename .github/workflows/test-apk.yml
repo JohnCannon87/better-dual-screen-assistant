@@ -55,7 +55,7 @@ jobs:
           TAG="test-${GITHUB_RUN_NUMBER}-${SHORT}"
           cp "$APK" "bdsa-${TAG}.apk"
           gh release create "$TAG" "bdsa-${TAG}.apk" \
-            --prerelease \
+            --draft \
             --target "$GITHUB_SHA" \
             --title "Test build ${GITHUB_RUN_NUMBER} (${SHORT})" \
-            --notes "Debug APK built from ${GITHUB_REF_NAME} @ ${SHORT}. Install on the Thor to test."
+            --notes "Debug APK built from ${GITHUB_REF_NAME} @ ${SHORT}. Draft: visible to repo owner only. Install on the Thor to test."
