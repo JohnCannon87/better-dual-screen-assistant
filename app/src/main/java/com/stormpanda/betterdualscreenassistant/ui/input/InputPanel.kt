@@ -1,7 +1,9 @@
 package com.stormpanda.betterdualscreenassistant.ui.input
 
+import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -24,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -37,19 +40,30 @@ import kotlin.math.abs
 
 private enum class InputMode(val label: String) {
     KEYBOARD("Keyboard"),
-    TRACKPAD("Trackpad"),
-    COMBINED("Combined")
+    TRACKPAD("Trackpad")
 }
+
+private const val PREFS_NAME = "input_panel"
+private const val PREF_MODE = "last_mode"
+private const val PREF_SENSITIVITY = "trackpad_sensitivity"
+
+private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
 /**
  * Virtual keyboard and trackpad for the top screen, shown on the bottom screen.
  * Key and mouse events are injected via the privileged helper.
  */
 @Composable
-fun InputPanel(modifier: Modifier = Modifier) {
+fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalTccColors.current
-    var mode by remember { mutableStateOf(InputMode.COMBINED) }
-    val trackpadState = remember { TrackpadState() }
+    val context = LocalContext.current
+    var mode by remember {
+        mutableStateOf(
+            InputMode.entries.firstOrNull { it.name == prefs(context).getString(PREF_MODE, null) }
+                ?: InputMode.KEYBOARD
+        )
+    }
+    val trackpadState = remember { TrackpadState(context) }
 
     Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -67,13 +81,18 @@ fun InputPanel(modifier: Modifier = Modifier) {
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (selected) colors.panelBackgroundSelected else colors.panelBackground)
-                        .pointerInput(m) { detectTapGestures { mode = m } }
+                        .pointerInput(m) {
+                            detectTapGestures {
+                                mode = m
+                                prefs(context).edit().putString(PREF_MODE, m.name).apply()
+                            }
+                        }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = m.label,
-                        color = if (selected) colors.secondary else colors.primary,
+                        color = if (selected) colors.accent else colors.primary,
                         fontSize = 16.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                     )
@@ -83,15 +102,8 @@ fun InputPanel(modifier: Modifier = Modifier) {
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (mode) {
-                InputMode.KEYBOARD -> VirtualKeyboard(Modifier.fillMaxSize())
-                InputMode.TRACKPAD -> Trackpad(trackpadState, Modifier.fillMaxSize())
-                InputMode.COMBINED -> Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Trackpad(trackpadState, Modifier.weight(0.38f).fillMaxWidth())
-                    VirtualKeyboard(Modifier.weight(0.62f).fillMaxWidth(), compact = true)
-                }
+                InputMode.KEYBOARD -> VirtualKeyboard(onClose, Modifier.fillMaxSize())
+                InputMode.TRACKPAD -> Trackpad(trackpadState, onClose, Modifier.fillMaxSize())
             }
         }
     }
@@ -101,12 +113,18 @@ fun InputPanel(modifier: Modifier = Modifier) {
 // Trackpad
 // ---------------------------------------------------------------------------------------------
 
-private class TrackpadState {
-    var sensitivity by mutableFloatStateOf(1.6f)
+private class TrackpadState(private val context: Context) {
+    private var value by mutableFloatStateOf(prefs(context).getFloat(PREF_SENSITIVITY, 1.6f))
+    var sensitivity: Float
+        get() = value
+        set(v) {
+            value = v
+            prefs(context).edit().putFloat(PREF_SENSITIVITY, v).apply()
+        }
 }
 
 @Composable
-private fun Trackpad(state: TrackpadState, modifier: Modifier = Modifier) {
+private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalTccColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
@@ -115,6 +133,7 @@ private fun Trackpad(state: TrackpadState, modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(colors.panelBackground)
+                .border(1.dp, colors.accent.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val first = awaitFirstDown(requireUnconsumed = false)
@@ -171,6 +190,7 @@ private fun Trackpad(state: TrackpadState, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth().height(48.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            PanelKey("✕", Modifier.weight(1f), onClick = onClose)
             MouseButton("Left", InputInjector.BUTTON_LEFT, Modifier.weight(2f))
             MouseButton("Middle", InputInjector.BUTTON_MIDDLE, Modifier.weight(1f))
             MouseButton("Right", InputInjector.BUTTON_RIGHT, Modifier.weight(2f))
@@ -222,7 +242,7 @@ private fun MouseButton(label: String, button: Int, modifier: Modifier) {
 // Keyboard
 // ---------------------------------------------------------------------------------------------
 
-private enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META }
+private enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META, CLOSE }
 
 private data class Key(
     val label: String,
@@ -277,6 +297,7 @@ private val bottomLetterRow = listOf(Key("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, w
     )
 
 private val spaceRow = listOf(
+    Key("✕", 0, weight = 1.2f, kind = KeyKind.CLOSE),
     Key("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, weight = 1.4f, kind = KeyKind.CTRL),
     Key("Win", KeyEvent.KEYCODE_META_LEFT, weight = 1.2f, kind = KeyKind.META),
     Key("Alt", KeyEvent.KEYCODE_ALT_LEFT, weight = 1.2f, kind = KeyKind.ALT),
@@ -287,13 +308,12 @@ private val spaceRow = listOf(
 )
 
 @Composable
-private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = false) {
+private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) {
     // One-shot latched modifiers: tap to latch, released after the next normal key.
     var shift by remember { mutableStateOf(false) }
     var ctrl by remember { mutableStateOf(false) }
     var alt by remember { mutableStateOf(false) }
     var meta by remember { mutableStateOf(false) }
-    var showFunction by remember { mutableStateOf(!compact) }
 
     fun metaState(): Int {
         var m = 0
@@ -310,7 +330,7 @@ private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = fa
             KeyKind.CTRL -> { ctrl = !ctrl; ctrl }
             KeyKind.ALT -> { alt = !alt; alt }
             KeyKind.META -> { meta = !meta; meta }
-            KeyKind.NORMAL -> return
+            KeyKind.NORMAL, KeyKind.CLOSE -> return
         }
         InputInjector.key(key.code, metaState(), if (nowOn) 0 else 1)
     }
@@ -328,6 +348,10 @@ private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = fa
     }
 
     fun press(key: Key) {
+        if (key.kind == KeyKind.CLOSE) {
+            onClose()
+            return
+        }
         if (key.kind != KeyKind.NORMAL) {
             toggleModifier(key)
             return
@@ -338,7 +362,7 @@ private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = fa
     }
 
     val rows = buildList {
-        if (showFunction) add(functionRow)
+        add(functionRow)
         add(numberRow)
         add(topRow)
         add(homeRow)
@@ -358,7 +382,7 @@ private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = fa
                         KeyKind.CTRL -> ctrl
                         KeyKind.ALT -> alt
                         KeyKind.META -> meta
-                        KeyKind.NORMAL -> false
+                        KeyKind.NORMAL, KeyKind.CLOSE -> false
                     }
                     val label = if (shift && key.shifted != null) key.shifted else key.label
                     PanelKey(
@@ -369,17 +393,6 @@ private fun VirtualKeyboard(modifier: Modifier = Modifier, compact: Boolean = fa
                         onClick = { press(key) }
                     )
                 }
-            }
-        }
-        if (compact) {
-            // Compact mode keeps the function row hidden; allow toggling it on demand.
-            Row(modifier = Modifier.fillMaxWidth().height(30.dp)) {
-                PanelKey(
-                    label = if (showFunction) "Hide F-keys" else "Show F-keys",
-                    modifier = Modifier.weight(1f),
-                    small = true,
-                    onClick = { showFunction = !showFunction }
-                )
             }
         }
     }
@@ -400,7 +413,16 @@ private fun PanelKey(
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (highlighted || pressed) colors.panelBackgroundSelected else colors.panelBackground
+                when {
+                    highlighted -> colors.accent.copy(alpha = 0.22f)
+                    pressed -> colors.panelBackgroundSelected
+                    else -> colors.panelBackground
+                }
+            )
+            .border(
+                1.dp,
+                if (highlighted) colors.accent.copy(alpha = 0.6f) else colors.primary.copy(alpha = 0.08f),
+                RoundedCornerShape(8.dp)
             )
             .pointerInput(onClick) {
                 detectTapGestures(
@@ -416,7 +438,7 @@ private fun PanelKey(
     ) {
         Text(
             text = label,
-            color = if (highlighted) colors.secondary else colors.primary,
+            color = if (highlighted) colors.accent else colors.primary,
             fontSize = if (small) 12.sp else 16.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1

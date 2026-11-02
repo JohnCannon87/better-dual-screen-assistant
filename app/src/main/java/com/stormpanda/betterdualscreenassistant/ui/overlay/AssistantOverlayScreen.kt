@@ -213,7 +213,7 @@ fun AssistantOverlayScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(start = 15.dp, end = 15.dp, bottom = 5.dp),
+                        .padding(start = 15.dp, end = 15.dp, bottom = if (activeTab == 2) 15.dp else 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (activeTab == 0) {
@@ -268,7 +268,7 @@ fun AssistantOverlayScreen(
                             }
                         )
                     } else if (activeTab == 2) {
-                        InputPanel()
+                        InputPanel(onClose = { onSelectTab(1) })
                     } else {
                         SystemSettingsTab(
                             telemetry = telemetry,
@@ -321,7 +321,7 @@ fun AssistantOverlayScreen(
                     }
                 }
 
-                NavigationBarSection(
+                if (activeTab != 2) NavigationBarSection(
                     activeTab = activeTab,
                     showEditButton = showEditButton,
                     onSelectTab = onSelectTab,
