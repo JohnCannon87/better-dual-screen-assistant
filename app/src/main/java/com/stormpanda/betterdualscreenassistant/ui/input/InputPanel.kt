@@ -300,7 +300,7 @@ private fun fn(label: String, code: Int, weight: Float = 1f) = Key(label, code, 
 /** Compact layout: strict 10-column grid with large keys (DS Keyboard "US-0" style). */
 private val compactRows: List<List<Key>> = listOf(
     listOf(
-        fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), plain("F1", KeyEvent.KEYCODE_F1, 2f),
+        fn("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), mod("Alt", KeyEvent.KEYCODE_ALT_LEFT, KeyKind.ALT, 2f),
         fn("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f), fn("Del", KeyEvent.KEYCODE_FORWARD_DEL, 2f),
         fn("Back", KeyEvent.KEYCODE_DEL, 2f)
     ),
@@ -314,8 +314,8 @@ private val compactRows: List<List<Key>> = listOf(
         mod("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, KeyKind.CTRL, 2f),
         mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f),
         plain("Space", KeyEvent.KEYCODE_SPACE, 2f),
-        plain("◄", KeyEvent.KEYCODE_DPAD_LEFT), plain("▲", KeyEvent.KEYCODE_DPAD_UP),
-        plain("▼", KeyEvent.KEYCODE_DPAD_DOWN), plain("►", KeyEvent.KEYCODE_DPAD_RIGHT)
+        fn("◄", KeyEvent.KEYCODE_DPAD_LEFT), fn("▲", KeyEvent.KEYCODE_DPAD_UP),
+        fn("▼", KeyEvent.KEYCODE_DPAD_DOWN), fn("►", KeyEvent.KEYCODE_DPAD_RIGHT)
     )
 )
 
