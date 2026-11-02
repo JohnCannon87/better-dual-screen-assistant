@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,7 +40,8 @@ import com.stormpanda.betterdualscreenassistant.ui.theme.LocalTccColors
 import kotlin.math.abs
 
 private enum class InputMode(val label: String) {
-    KEYBOARD("Keyboard"),
+    COMPACT("Compact"),
+    FULL("Full"),
     TRACKPAD("Trackpad")
 }
 
@@ -60,12 +62,12 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
     var mode by remember {
         mutableStateOf(
             InputMode.entries.firstOrNull { it.name == prefs(context).getString(PREF_MODE, null) }
-                ?: InputMode.KEYBOARD
+                ?: InputMode.COMPACT
         )
     }
     val trackpadState = remember { TrackpadState(context) }
 
-    Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -74,6 +76,17 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .width(56.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.panelBackgroundSelected)
+                    .pointerInput(Unit) { detectTapGestures { onClose() } }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✕", color = colors.primary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
             InputMode.entries.forEach { m ->
                 val selected = m == mode
                 Box(
@@ -102,7 +115,8 @@ fun InputPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (mode) {
-                InputMode.KEYBOARD -> VirtualKeyboard(onClose, Modifier.fillMaxSize())
+                InputMode.COMPACT -> VirtualKeyboard(compactRows, Modifier.fillMaxSize())
+                InputMode.FULL -> VirtualKeyboard(fullRows, Modifier.fillMaxSize())
                 InputMode.TRACKPAD -> Trackpad(trackpadState, onClose, Modifier.fillMaxSize())
             }
         }
@@ -190,7 +204,6 @@ private fun Trackpad(state: TrackpadState, onClose: () -> Unit, modifier: Modifi
             modifier = Modifier.fillMaxWidth().height(48.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            PanelKey("✕", Modifier.weight(1f), onClick = onClose)
             MouseButton("Left", InputInjector.BUTTON_LEFT, Modifier.weight(2f))
             MouseButton("Middle", InputInjector.BUTTON_MIDDLE, Modifier.weight(1f))
             MouseButton("Right", InputInjector.BUTTON_RIGHT, Modifier.weight(2f))
@@ -242,7 +255,7 @@ private fun MouseButton(label: String, button: Int, modifier: Modifier) {
 // Keyboard
 // ---------------------------------------------------------------------------------------------
 
-private enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META, CLOSE }
+private enum class KeyKind { NORMAL, SHIFT, CTRL, ALT, META }
 
 private data class Key(
     val label: String,
@@ -252,63 +265,81 @@ private data class Key(
     val kind: KeyKind = KeyKind.NORMAL
 )
 
-private fun letters(chars: String): List<Key> = chars.map {
-    Key(it.toString(), KeyEvent.KEYCODE_A + (it - 'a'), it.uppercase())
-}
+private fun letter(c: Char) = Key(c.uppercase(), KeyEvent.KEYCODE_A + (c - 'a'), c.uppercase())
 
-private val functionRow = listOf(Key("Esc", KeyEvent.KEYCODE_ESCAPE, weight = 1.3f)) +
-    (1..12).map { Key("F$it", KeyEvent.KEYCODE_F1 + it - 1) } +
-    listOf(Key("Del", KeyEvent.KEYCODE_FORWARD_DEL, weight = 1.3f))
+private fun letters(chars: String): List<Key> = chars.map { letter(it) }
 
-private val numberRow = listOf(
-    Key("`", KeyEvent.KEYCODE_GRAVE, "~"),
+private val digitCodes = listOf(
     Key("1", KeyEvent.KEYCODE_1, "!"), Key("2", KeyEvent.KEYCODE_2, "@"),
     Key("3", KeyEvent.KEYCODE_3, "#"), Key("4", KeyEvent.KEYCODE_4, "$"),
     Key("5", KeyEvent.KEYCODE_5, "%"), Key("6", KeyEvent.KEYCODE_6, "^"),
     Key("7", KeyEvent.KEYCODE_7, "&"), Key("8", KeyEvent.KEYCODE_8, "*"),
-    Key("9", KeyEvent.KEYCODE_9, "("), Key("0", KeyEvent.KEYCODE_0, ")"),
-    Key("-", KeyEvent.KEYCODE_MINUS, "_"), Key("=", KeyEvent.KEYCODE_EQUALS, "+"),
-    Key("Bksp", KeyEvent.KEYCODE_DEL, weight = 1.8f)
+    Key("9", KeyEvent.KEYCODE_9, "("), Key("0", KeyEvent.KEYCODE_0, ")")
 )
 
-private val topRow = listOf(Key("Tab", KeyEvent.KEYCODE_TAB, weight = 1.5f)) +
-    letters("qwertyuiop") +
-    listOf(
-        Key("[", KeyEvent.KEYCODE_LEFT_BRACKET, "{"),
-        Key("]", KeyEvent.KEYCODE_RIGHT_BRACKET, "}"),
-        Key("\\", KeyEvent.KEYCODE_BACKSLASH, "|", weight = 1.3f)
-    )
+private val keyMinus = Key("-", KeyEvent.KEYCODE_MINUS, "_")
+private val keyEquals = Key("=", KeyEvent.KEYCODE_EQUALS, "+")
+private val keyLBracket = Key("[", KeyEvent.KEYCODE_LEFT_BRACKET, "{")
+private val keyRBracket = Key("]", KeyEvent.KEYCODE_RIGHT_BRACKET, "}")
+private val keyBackslash = Key("\\", KeyEvent.KEYCODE_BACKSLASH, "|")
+private val keySemicolon = Key(";", KeyEvent.KEYCODE_SEMICOLON, ":")
+private val keyApostrophe = Key("'", KeyEvent.KEYCODE_APOSTROPHE, "\"")
+private val keyComma = Key(",", KeyEvent.KEYCODE_COMMA, "<")
+private val keyPeriod = Key(".", KeyEvent.KEYCODE_PERIOD, ">")
+private val keySlash = Key("/", KeyEvent.KEYCODE_SLASH, "?")
 
-private val homeRow = listOf(Key("Caps", KeyEvent.KEYCODE_CAPS_LOCK, weight = 1.8f)) +
-    letters("asdfghjkl") +
-    listOf(
-        Key(";", KeyEvent.KEYCODE_SEMICOLON, ":"),
-        Key("'", KeyEvent.KEYCODE_APOSTROPHE, "\""),
-        Key("Enter", KeyEvent.KEYCODE_ENTER, weight = 2.2f)
-    )
+private fun mod(label: String, code: Int, kind: KeyKind, weight: Float) = Key(label, code, null, weight, kind)
+private fun plain(label: String, code: Int, weight: Float = 1f) = Key(label, code, null, weight)
 
-private val bottomLetterRow = listOf(Key("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, weight = 2.3f, kind = KeyKind.SHIFT)) +
-    letters("zxcvbnm") +
+/** Compact layout: strict 10-column grid with large keys (DS Keyboard "US-0" style). */
+private val compactRows: List<List<Key>> = listOf(
     listOf(
-        Key(",", KeyEvent.KEYCODE_COMMA, "<"),
-        Key(".", KeyEvent.KEYCODE_PERIOD, ">"),
-        Key("/", KeyEvent.KEYCODE_SLASH, "?"),
-        Key("↑", KeyEvent.KEYCODE_DPAD_UP, weight = 1.2f)
+        plain("Esc", KeyEvent.KEYCODE_ESCAPE, 2f), plain("F1", KeyEvent.KEYCODE_F1, 2f),
+        plain("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f), plain("Del", KeyEvent.KEYCODE_FORWARD_DEL, 2f),
+        plain("Back", KeyEvent.KEYCODE_DEL, 2f)
+    ),
+    listOf(plain("Tab", KeyEvent.KEYCODE_TAB, 2f), keyApostrophe, keyBackslash, keyLBracket, keyRBracket,
+        keyMinus, keyEquals, plain("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
+    digitCodes,
+    letters("qwertyuiop"),
+    letters("asdfghjkl") + keySemicolon,
+    letters("zxcvbnm") + listOf(keyComma, keyPeriod, keySlash),
+    listOf(
+        mod("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, KeyKind.CTRL, 2f),
+        mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f),
+        plain("Space", KeyEvent.KEYCODE_SPACE, 2f),
+        plain("◄", KeyEvent.KEYCODE_DPAD_LEFT), plain("▲", KeyEvent.KEYCODE_DPAD_UP),
+        plain("▼", KeyEvent.KEYCODE_DPAD_DOWN), plain("►", KeyEvent.KEYCODE_DPAD_RIGHT)
     )
-
-private val spaceRow = listOf(
-    Key("✕", 0, weight = 1.2f, kind = KeyKind.CLOSE),
-    Key("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, weight = 1.4f, kind = KeyKind.CTRL),
-    Key("Win", KeyEvent.KEYCODE_META_LEFT, weight = 1.2f, kind = KeyKind.META),
-    Key("Alt", KeyEvent.KEYCODE_ALT_LEFT, weight = 1.2f, kind = KeyKind.ALT),
-    Key("Space", KeyEvent.KEYCODE_SPACE, weight = 6f),
-    Key("←", KeyEvent.KEYCODE_DPAD_LEFT, weight = 1.2f),
-    Key("↓", KeyEvent.KEYCODE_DPAD_DOWN, weight = 1.2f),
-    Key("→", KeyEvent.KEYCODE_DPAD_RIGHT, weight = 1.2f)
 )
+
+/** Full PC layout on a 15-unit grid (DS Keyboard "US-1" style). */
+private val fullRows: List<List<Key>> = listOf(
+    listOf(plain("Esc", KeyEvent.KEYCODE_ESCAPE, 2f)) +
+        (1..12).map { plain("F$it", KeyEvent.KEYCODE_F1 + it - 1) } +
+        plain("SL", KeyEvent.KEYCODE_SCROLL_LOCK),
+    listOf(Key("`", KeyEvent.KEYCODE_GRAVE, "~")) + digitCodes + listOf(keyMinus, keyEquals) +
+        plain("Back", KeyEvent.KEYCODE_DEL, 2f),
+    listOf(plain("Tab", KeyEvent.KEYCODE_TAB, 2f)) + letters("qwertyuiop") +
+        listOf(keyLBracket, keyRBracket, keyBackslash),
+    listOf(plain("Caps", KeyEvent.KEYCODE_CAPS_LOCK, 2f)) + letters("asdfghjkl") +
+        listOf(keySemicolon, keyApostrophe, plain("Enter", KeyEvent.KEYCODE_ENTER, 2f)),
+    listOf(mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f), keyBackslash) + letters("zxcvbnm") +
+        listOf(keyComma, keyPeriod, keySlash, mod("Shift", KeyEvent.KEYCODE_SHIFT_LEFT, KeyKind.SHIFT, 2f)),
+    listOf(
+        mod("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, KeyKind.CTRL, 2f),
+        mod("Wn", KeyEvent.KEYCODE_META_LEFT, KeyKind.META, 1f),
+        mod("Alt", KeyEvent.KEYCODE_ALT_LEFT, KeyKind.ALT, 2f),
+        plain("Space", KeyEvent.KEYCODE_SPACE, 6f),
+        mod("Alt", KeyEvent.KEYCODE_ALT_LEFT, KeyKind.ALT, 2f),
+        mod("Ctrl", KeyEvent.KEYCODE_CTRL_LEFT, KeyKind.CTRL, 2f)
+    )
+)
+
+private val KeyGap = 3.dp
 
 @Composable
-private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) {
+private fun VirtualKeyboard(rows: List<List<Key>>, modifier: Modifier = Modifier) {
     // One-shot latched modifiers: tap to latch, released after the next normal key.
     var shift by remember { mutableStateOf(false) }
     var ctrl by remember { mutableStateOf(false) }
@@ -330,7 +361,7 @@ private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) 
             KeyKind.CTRL -> { ctrl = !ctrl; ctrl }
             KeyKind.ALT -> { alt = !alt; alt }
             KeyKind.META -> { meta = !meta; meta }
-            KeyKind.NORMAL, KeyKind.CLOSE -> return
+            KeyKind.NORMAL -> return
         }
         InputInjector.key(key.code, metaState(), if (nowOn) 0 else 1)
     }
@@ -348,10 +379,6 @@ private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) 
     }
 
     fun press(key: Key) {
-        if (key.kind == KeyKind.CLOSE) {
-            onClose()
-            return
-        }
         if (key.kind != KeyKind.NORMAL) {
             toggleModifier(key)
             return
@@ -361,20 +388,11 @@ private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) 
         if (state != 0) releaseModifiers()
     }
 
-    val rows = buildList {
-        add(functionRow)
-        add(numberRow)
-        add(topRow)
-        add(homeRow)
-        add(bottomLetterRow)
-        add(spaceRow)
-    }
-
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(KeyGap)) {
         rows.forEach { row ->
             Row(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                horizontalArrangement = Arrangement.spacedBy(KeyGap)
             ) {
                 row.forEach { key ->
                     val active = when (key.kind) {
@@ -382,14 +400,16 @@ private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) 
                         KeyKind.CTRL -> ctrl
                         KeyKind.ALT -> alt
                         KeyKind.META -> meta
-                        KeyKind.NORMAL, KeyKind.CLOSE -> false
+                        KeyKind.NORMAL -> false
                     }
-                    val label = if (shift && key.shifted != null) key.shifted else key.label
+                    // Symbol keys show the shifted symbol small above the base symbol.
+                    val stacked = key.shifted != null && !key.label[0].isLetter()
                     PanelKey(
-                        label = label,
+                        label = key.label,
+                        topLabel = if (stacked) key.shifted else null,
                         modifier = Modifier.weight(key.weight),
                         highlighted = active,
-                        small = label.length > 2,
+                        small = key.label.length > 2,
                         onClick = { press(key) }
                     )
                 }
@@ -402,6 +422,7 @@ private fun VirtualKeyboard(onClose: () -> Unit, modifier: Modifier = Modifier) 
 private fun PanelKey(
     label: String,
     modifier: Modifier = Modifier,
+    topLabel: String? = null,
     highlighted: Boolean = false,
     small: Boolean = false,
     onClick: () -> Unit
@@ -436,12 +457,24 @@ private fun PanelKey(
             },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            color = if (highlighted) colors.accent else colors.primary,
-            fontSize = if (small) 12.sp else 16.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (topLabel != null) {
+                Text(
+                    text = topLabel,
+                    color = colors.primary.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    lineHeight = 11.sp,
+                    maxLines = 1
+                )
+            }
+            Text(
+                text = label,
+                color = if (highlighted) colors.accent else colors.primary,
+                fontSize = if (small) 14.sp else 18.sp,
+                lineHeight = if (small) 14.sp else 18.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
     }
 }
